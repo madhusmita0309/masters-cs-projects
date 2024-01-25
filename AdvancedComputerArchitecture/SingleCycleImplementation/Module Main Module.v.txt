@@ -1,0 +1,1371 @@
+// Module Main Module
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date:    16:35:01 02/20/2019 
+// Design Name: 
+// Module Name:    MainModule 
+// Project Name: 
+// Target Devices: 
+// Tool versions: 
+// Description: 
+//
+// Dependencies: 
+//
+// Revision: 
+// Revision 0.01 - File Created
+// Additional Comments: 
+//
+//////////////////////////////////////////////////////////////////////////////////
+module MainModule(input clk,
+						input reset,
+						output wire [31:0] writeData
+
+    );
+	
+	wire [31:0] pc; wire [31:0] pcAddOp; wire [3:0] pcAddOp1; wire [31:0] jOp;wire [31:0] jalrInp0; 
+	wire [31:0] jOp0;wire [31:0] pcConcat1; wire [31:0] jInp0 ;
+	wire [31:0] IMop;
+	wire [25:0] ir1; wire [3:0] pc1; wire[27:0] ir2; 
+	wire [4:0] rs; wire [4:0] rt; wire [4:0] rd; wire [4:0] shAmt; wire [4:0] rdMuxOp;
+	wire [5:0] opCode; wire [5:0] funcField;
+	wire [15:0] instImm;	wire [31:0] luiOp;
+	wire [31:0] outBusA; wire [31:0] outBusB;
+	wire [31:0] rtShAmt; wire [31:0] rtSExt; wire [31:0] rtZext;
+	wire [31:0] srcA; wire [31:0] srcB;
+	wire [31:0] aluOut0;wire [31:0] aluOut1;
+	//wire [31:0] writeData;
+	wire [31:0] mAluIn1; wire [31:0] mAluIn0;	wire [31:0] mAluOutput;
+	wire [31:0] hiInp;wire [31:0] loInp; wire [31:0] hiOutput; wire [31:0] loOutput;
+	wire [31:0] hiOutm; wire [31:0] loOutm;
+	//control signals
+	wire aluSrcA; wire [1:0] aluSrcB; wire [3:0] aluCtrl; wire memRd; wire memWr;wire [1:0] hiSel; wire [1:0] loSel;
+	wire hiWr; wire loWr; wire mAluOp; wire [2:0] memToReg; wire regDst; wire regWr; wire branch ; wire jump;wire jalr;
+	wire bOpEn; wire zeroflag;
+	wire [31:0] memReadData; //wire [31:0] hiInp; wire [31:0] loInp;
+	
+	PC p1(clk,reset,jOp,pc);
+	adder add0(32'd1,pc,pcAddOp);
+	
+					instructionMemory IM(pc,
+								 ir1,
+								 opCode,
+								 funcField,
+								 rs,
+								 rt,
+								 rd,
+								 shAmt,
+								 instImm);
+				controlUnit c1( opCode,
+						  funcField,
+						  aluSrcA,
+						   aluSrcB,
+						   aluCtrl,
+						  memRd,
+						   memWr,
+						   hiSel,
+						   loSel,
+						 hiWr,
+						   loWr,
+						   maluOp,
+						   memToReg,
+						  regDst,
+						  regWr,
+						  branch,
+						 jump,
+						   jalr);
+						  
+    
+	
+	muxRtRd muxrdrt( rd, rt, regDst,rdMuxOp);
+	registerFile RF(clk,reset,regWrite,rs,rt,rdMuxOp,writeData,outBusA,outBusB);
+	pcSepbits psep(pcAddOp,pcAddOp1);
+	shiftby2 s2(ir1,ir2);
+	
+	pcConcat pccat(ir2,pcAddOp1,pcConcat1);
+	
+	mux2to1 mux2to10( pcConcat1, jOp0, jump,jalrInp0);
+	mux2to1 mux2to11( jalrInp0, outBusA, jalr,jOp);
+	
+
+	
+	zeroExtendShAmt z1(shAmt,
+							 rtShAmt);
+	signExtension se1( instImm,
+							rtSExt);
+	zeroExtension ze1(instImm,
+							rtZext);
+	concat32 co1( instImm,luiOp);
+	
+           mux2to1 malu1(rtShAmt,outBusA,aluSrcA,srcA);
+	 Mux3to1 malu2(rtZext,rtSExt,outBusB,aluSrcB,srcB);
+		ALU alu1( srcA ,
+				srcB ,
+				aluCtrl ,
+				zeroflag,
+				aluOut0,
+				aluOut1    ); 
+	memoryData md( clk,
+						outBusB,  
+						aluOut0,  
+						memWr,  
+						memRd,  
+						memReadData  
+						);
+    
+	
+	andModule a(zeroflag,branch,bOpEn); 
+	adder add2(pcAddOp,rtSExt,jInp0);
+	mux2to1 mux2to12(jInp0,pcAddOp,bOpEn,jOp0);
+
+	HI h(hiInp,hiWr , hiOutput );
+	LO l(loInp,loWr,loOutput);
+		
+	mALUOp mmm(hiOutput,loOutput,  aluOut0,  aluOut1,  mAluOp,
+				   hiOutm, loOutm);
+    
+	
+	Mux3to1 mh1(hiOutm,outBusA,aluOut1,hiSel,hiInp);
+	Mux3to1 mh2(loOutm,outBusA,aluOut0,loSel,loInp);
+    
+	Mux6to1 mux61( pcAddOp, luiOp, loOutput, hiOutput, memReadData,aluOut0,
+						memToReg,writeData);
+	
+endmodule
+
+
+
+
+
+//Main Module Test Bench 
+
+module MainModuleTest;
+
+	// Inputs
+	reg clk;
+	reg reset;
+
+	// Outputs
+	wire [31:0] writeData;
+
+	// Instantiate the Unit Under Test (UUT)
+	MainModule uut (
+		.clk(clk), 
+		.reset(reset), 
+		.writeData(writeData)
+	);
+always 
+	#10 clk=~clk;
+	initial begin
+	
+		// Initialize Inputs
+		clk = 0;
+		reset = 0;
+		
+		
+      #10 reset=1;
+		// Add stimulus here
+		#200 reset=0;
+
+	end
+      
+endmodule
+
+// PC  Module
+module PC(input clk,
+			input reset,
+			input [31:0] pcIn,
+			output reg [31:0] pcOut
+    );
+initial begin
+		pcOut=0;
+		
+end
+always@(negedge clk)
+	begin
+
+	if(reset == 32'd1)
+		pcOut =32'b0000_0000_0000_0000_0000_0000_0000_0000;
+	else
+		pcOut=pcIn;
+end
+endmodule
+
+//Pc Test
+
+module PCTest;
+
+	// Inputs
+	reg clk;
+	reg reset;
+	reg [31:0] pcIn;
+
+	// Outputs
+	wire [31:0] pcOut;
+
+	// Instantiate the Unit Under Test (UUT)
+	PC uut (
+		.clk(clk), 
+		.reset(reset), 
+		.pcIn(pcIn), 
+		.pcOut(pcOut)
+	);
+
+	initial begin
+		// Initialize Inputs
+		clk = 0;
+		reset = 0;
+		pcIn = 0;
+
+		// Wait 100 ns for global reset to finish
+		#10 reset=1;
+		#40 reset=0;
+        
+		// Add stimulus here
+
+	end
+      
+endmodule
+
+// Instruction Memory Module
+
+module instructionMemory( input [31:0] pc, 
+								 
+								 output reg [25:0] instInit,
+								 output reg [5:0] opCode, //[31:26]
+								 output reg [5:0] funcField,
+								 output reg [4:0] instRS,
+								 output reg [4:0] instRT,
+								 output reg [4:0] instRD,
+								 output reg [4:0] instShAmt,
+								 output reg [15:0] instImm
+								);
+
+reg [31:0] instructionMemoryArr [3:0];  
+reg [31:0] instructionM ;
+always@(pc)
+begin
+						//op6   rs5   rt5   rd5   shamt5  func 6
+instructionMemoryArr[0]=32'b001000_00000_00000_00000_00000_01100;	//addi	
+instructionMemoryArr[1]=32'b001000_00001_00001_00000_00000_10000;	//addi						
+//instructionMemoryArr[2]=32'b000000_00010_00011_00000_00000_10000;//add
+//instructionMemoryArr[2]=32'b000000_00010_00011_00000_00000_10010;//sub
+//instructionMemoryArr[3]=32'b000000_00010_00011_00000_00000_01100;//mult
+//instructionMemoryArr[4]=32'b000000_00010_00011_00000_00000_01110;//div
+
+
+instructionM = instructionMemoryArr[pc];
+
+instInit= instructionM[25:0];
+opCode= instructionM[31:26];
+funcField=instructionM[5:0];
+instRS= instructionM[25:21];
+instRT= instructionM[20:16];
+instRD= instructionM[15:11];
+instShAmt= instructionM[10:6];
+instImm= instructionM[15:0];
+
+end
+
+endmodule
+
+// Instruction Memory Test Module
+
+`timescale 1ns / 1ps
+
+////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer:
+//
+// Create Date:   15:39:13 02/19/2019
+// Design Name:   instructionMemory
+// Module Name:   C:/Users/madhusmita/CompArcWorkspace/abc/instructionMemoryTest.v
+// Project Name:  abc
+// Target Device:  
+// Tool versions:  
+// Description: 
+//
+// Verilog Test Fixture created by ISE for module: instructionMemory
+//
+// Dependencies:
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+////////////////////////////////////////////////////////////////////////////////
+
+module instructionMemoryTest;
+
+	// Inputs
+	reg [31:0] pc;
+
+	// Outputs
+	wire [31:0] instructionMemoryArr;
+	wire [25:0] instInit;
+			wire					  [5:0] opCode; //[31:26]
+				wire				[5:0] funcField;
+					wire			 [4:0] instRS;
+						wire		  [4:0] instRT;
+						wire		[4:0] instRD;
+						wire		 [4:0] instShAmt;
+							wire	 [15:0] instImm;
+	// Instantiate the Unit Under Test (UUT)
+	instructionMemory uut (
+		.pc(pc), 
+		
+		 .funcField(funcField),
+			.instRS(instRS),
+		.instRT(instRT),
+		.instRD(instRD),
+		.instShAmt(instShAmt),
+		.instImm(instImm)
+	);
+
+	initial begin
+		// Initialize Inputs
+		pc = 0;
+
+		// Wait 100 ns for global reset to finish
+		#10 ;
+        
+		// Add stimulus here
+
+	end
+      
+endmodule
+
+//Adder module
+module adder(input [31:0] add1,
+				 input [31:0] add0,
+				output reg [31:0] adderOp 
+    );
+always@(*)
+begin
+adderOp =add1+add0;
+end
+
+endmodule
+
+//Control Unit
+module controlUnit( input [5:0] opCode,
+						  input [5:0] funcField,
+						  output reg aluSrcA,
+						  output reg [1:0] aluSrcB,
+						  output reg [3:0] aluCtrl,
+						  output reg memRd,
+						  output reg memWr,
+						  output reg [1:0] hiSel,
+						  output reg [1:0] loSel,
+						  output reg hiWr,
+						  output reg loWr,
+						  output reg maluOp,
+						  output reg [2:0] memtoReg,
+						  output reg regDest,
+						  output reg regWr,
+						  output reg branch,
+						  output reg jump,
+						  output reg jalr
+						  
+    );
+	
+always@(*)
+	begin
+		case(opCode)
+		6'b000000 : begin
+							if( funcField == 6'd32 || funcField == 6'd34 ) //add sub 
+							begin 
+							aluSrcA =1'b0;
+							aluSrcB =2'b00;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							memtoReg=3'b000;
+							regDest =1'b1;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							end
+							
+							if( funcField == 6'd32 )
+									aluCtrl =4'b0000;
+							if( funcField == 6'd34 )
+									aluCtrl =4'b0010;
+							if( funcField == 6'd24 || funcField == 6'd26 ) //mult div
+							begin
+							aluSrcA =1'b0;
+							aluSrcB =2'b00;
+							memRd   =1'b0;
+							memWr	  =1'b0;
+							hiSel	  =2'b00;
+							loSel   =2'b00;
+							hiWr	  =1'b1;
+							loWr    =1'b1;
+							//maluOp	=XX;
+							//memtoReg=3'bXXX;
+							//regDest =1'bX;
+							regWr	=1'b0;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							end
+							
+							if( funcField == 6'd24 )
+								aluCtrl=4'b0011;
+							if( funcField == 6'd26 )
+								aluCtrl=4'b0100;
+							
+							if( funcField == 6'd0) //sll
+							begin
+							aluSrcA =1'b1;
+							aluSrcB =2'b00;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							memtoReg=3'b000;
+							regDest =1'b1;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							end
+							
+							if ( funcField == 6'd16 )//mfhi
+							begin
+							//aluSrcA =1'bX;
+							//aluSrcB =2'bXX;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							memtoReg=3'b010;
+							regDest =1'b1;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							end
+							
+							if ( funcField == 6'd18 )//mflo
+							begin
+							//aluSrcA =1'bX;
+							//aluSrcB =2'bXX;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							memtoReg=3'b011;
+							regDest =1'b1;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							end
+							
+							if ( funcField == 6'd17 )//mthi
+							begin
+							//aluSrcA =1'bX;
+							//aluSrcB =2'bXX;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							hiSel	= 2'b01;
+							//loSel = XX;
+							hiWr	=1'b1;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							//memtoReg=3'b000;
+							//regDest =1'b1;
+							regWr	=1'b0;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							end
+							
+							if ( funcField == 6'd19 )//mtlo
+							begin
+							//aluSrcA =1'bX;
+							//aluSrcB =2'bXX;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							loSel = 2'b01;
+							hiWr	=1'b0;
+							loWr	=1'b1;
+							//maluOp	=XX;
+							//memtoReg=3'b000;
+							//regDest =1'b1;
+							regWr	=1'b0;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							end
+							
+							if( funcField == 6'd9 ) //jalr
+							begin 
+							//aluSrcA =1'b0;
+							//aluSrcB =2'b00;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							memtoReg=3'b111;
+							regDest =1'b1;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b1;
+							end
+							
+						end
+		6'b011100 : begin
+							if( funcField == 6'd4 ) //madd 
+							begin 
+							aluSrcA =1'b0;
+							aluSrcB =2'b00;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							hiSel	= 2'b10;
+							loSel = 2'b10;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							maluOp	=1'b0; //different 
+							//memtoReg=3'bXXX;
+							//regDest =1'bX;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							aluCtrl =4'b0000;
+							end
+							
+							if( funcField == 6'd0 ) // msub 
+							begin 
+							aluSrcA =1'b0;
+							aluSrcB =2'b00;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							hiSel	= 2'b10;
+							loSel = 2'b10;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							maluOp=1'b1; //different 
+							//memtoReg=3'bXXX;
+							//regDest =1'bX;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							aluCtrl =4'b0010;
+							end
+							
+						end
+		6'b001000	:begin //addi
+							aluSrcA =1'b0;
+							aluSrcB =2'b01;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							memtoReg=3'b000;
+							regDest =1'b0;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							aluCtrl=4'b0000;
+						end
+		6'b001101  :begin //ori
+							aluSrcA =1'b0;
+							aluSrcB =2'b10;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							memtoReg=3'b000;
+							regDest =1'b0;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+							aluCtrl=4'b0110;
+						end
+		6'b001111  :begin //lui
+							//aluSrcA =1'b0;
+							//aluSrcB =2'b10;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							memtoReg=3'b100;
+							regDest =1'b0;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+						end	
+		6'b001000  :begin //beq
+							aluSrcA =1'b0;
+							aluSrcB =2'b00;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+						//	memtoReg=3'b000;
+						//	regDest =1'b0;
+							regWr	=1'b0;
+							branch	=1'b1;
+							jump	=1'b0;
+							jalr	=1'b0;
+						end
+		6'b001000	:begin //lw
+							aluSrcA =1'b0;
+							aluSrcB =2'b01;
+							memRd   =1'b1;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							memtoReg=3'b001;
+							regDest =1'b0;
+							regWr	=1'b1;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+						end
+		6'b101011	:begin //sw
+							aluSrcA =1'b0;
+							aluSrcB =2'b01;
+							memRd   =1'b0;
+							memWr	=1'b1;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							//memtoReg=3'b001;
+							//regDest =1'b0;
+							regWr	=1'b0;
+							branch	=1'b0;
+							jump	=1'b0;
+							jalr	=1'b0;
+						end
+		
+		6'b000010	:begin //j
+							//aluSrcA =1'b0;
+							//aluSrcB =2'b00;
+							memRd   =1'b0;
+							memWr	=1'b0;
+							//hiSel	= XX;
+							//loSel = XX;
+							hiWr	=1'b0;
+							loWr	=1'b0;
+							//maluOp	=XX;
+							//memtoReg=3'b111;
+							//regDest =1'b1;
+							regWr	=1'b0;
+							branch	=1'b0;
+							jump	=1'b1;
+							jalr	=1'b0;
+						end
+
+		endcase
+	end
+
+endmodule
+
+//Control Unit Test Bench
+
+	module controlUnitTest;
+
+	// Inputs
+	reg [5:0] opCode;
+	reg [5:0] funcField;
+
+	// Outputs
+	wire aluSrcA;
+	wire [1:0] aluSrcB;
+	wire memRd;
+	wire memWr;
+	wire [1:0] hiSel;
+	wire [1:0] loSel;
+	wire hiWr;
+	wire loWr;
+	wire maluOp;
+	wire [2:0] memtoReg;
+	wire regDest;
+	wire regWr;
+	wire branch;
+	wire jump;
+	wire jalr;
+
+	// Instantiate the Unit Under Test (UUT)
+	controlUnit uut (
+		.opCode(opCode), 
+		.funcField(funcField), 
+		.aluSrcA(aluSrcA), 
+		.aluSrcB(aluSrcB), 
+		.memRd(memRd), 
+		.memWr(memWr), 
+		.hiSel(hiSel), 
+		.loSel(loSel), 
+		.hiWr(hiWr), 
+		.loWr(loWr), 
+		.maluOp(maluOp), 
+		.memtoReg(memtoReg), 
+		.regDest(regDest), 
+		.regWr(regWr), 
+		.branch(branch), 
+		.jump(jump), 
+		.jalr(jalr)
+	);
+
+	initial begin
+		// Initialize Inputs
+		opCode = 0;
+		funcField = 0;
+
+		// Wait 100 ns for global reset to finish
+		#10;
+      #10 opCode= 6'b000000; funcField=6'd32; //add
+		// Add stimulus here
+
+	end
+      
+endmodule
+
+
+//Mux for RT-RD
+module muxRtRdTest;
+
+	// Inputs
+	reg [4:0] op1;
+	reg [4:0] op0;
+	reg sel;
+
+	// Outputs
+	wire [4:0] out0;
+
+	// Instantiate the Unit Under Test (UUT)
+	muxRtRd uut (
+		.op1(op1), 
+		.op0(op0), 
+		.sel(sel), 
+		.out0(out0)
+	);
+
+	initial begin
+		// Initialize Inputs
+		op1 = 0;
+		op0 = 0;
+		sel = 0;
+
+		// Wait 100 ns for global reset to finish
+		#100;
+        
+		// Add stimulus here
+
+	end
+      
+endmodule
+
+//Register File
+
+module registerFile(input clk,input reset,input regWrite,input [4:0] srcRegA,input [4:0]
+srcRegB,input [4:0] destReg,input [31:0] writeData,output [31:0] outBusA,output [31:0] outBusB);
+
+wire [31:0] decOut;
+wire [31:0] outR0;
+wire [31:0] outR1;
+wire [31:0] outR2;
+wire [31:0] outR3;
+wire [31:0] outR4;
+wire [31:0] outR5;
+wire [31:0] outR6;
+wire [31:0] outR7;
+wire [31:0] outR8;
+wire [31:0] outR9;
+wire [31:0] outR10;
+wire [31:0] outR11;
+wire [31:0] outR12;
+wire [31:0] outR13;
+wire [31:0] outR14;
+wire [31:0] outR15;
+wire [31:0] outR16;
+wire [31:0] outR17;
+wire [31:0] outR18;
+wire [31:0] outR19;
+wire [31:0] outR20;
+wire [31:0] outR21;
+wire [31:0] outR22;
+wire [31:0] outR23;
+wire [31:0] outR24;
+wire [31:0] outR25;
+wire [31:0] outR26;
+wire [31:0] outR27;
+wire [31:0] outR28;
+wire [31:0] outR29;
+wire [31:0] outR30;
+wire [31:0] outR31;
+
+decoder d0(destReg,decOut);
+registerSet r0(clk, reset, regWrite, decOut, writeData, outR0,
+outR1,
+outR2,
+outR3,
+outR4,
+outR5,
+outR6,
+outR7,
+outR8,
+outR9,
+outR10,
+outR11,
+outR12,
+outR13,
+outR14,
+outR15,
+outR16,
+outR17,
+outR18,
+outR19,
+outR20,
+outR21,
+outR22,
+outR23,
+outR24,
+outR25,
+outR26,
+outR27,
+outR28,
+outR29,
+outR30,
+outR31
+);
+
+Mux32to1 m0(outR0,
+outR1,
+outR2,
+outR3,
+outR4,
+outR5,
+outR6,
+outR7,
+outR8,
+outR9,
+outR10,
+outR11,
+outR12,
+outR13,
+outR14,
+outR15,
+outR16,
+outR17,
+outR18,
+outR19,
+outR20,
+outR21,
+outR22,
+outR23,
+outR24,
+outR25,
+outR26,
+outR27,
+outR28,
+outR29,
+outR30,
+outR31,
+srcRegA,outBusA);
+
+Mux32to1 m1(outR0,
+outR1,
+outR2,
+outR3,
+outR4,
+outR5,
+outR6,
+outR7,
+outR8,
+outR9,
+outR10,
+outR11,
+outR12,
+outR13,
+outR14,
+outR15,
+outR16,
+outR17,
+outR18,
+outR19,
+outR20,
+outR21,
+outR22,
+outR23,
+outR24,
+outR25,
+outR26,
+outR27,
+outR28,
+outR29,
+outR30,
+outR31,
+srcRegB,outBusB);
+
+endmodule
+
+//Register File Test bench 
+module regFileTest;
+
+	// Inputs
+reg clk;
+reg reset;
+reg regWrite;
+reg [4:0] srcRegA;
+reg [4:0] srcRegB;
+reg [4:0] destReg;
+reg [31:0] writeData;
+
+// Outputs
+wire [31:0] outBusA;
+wire [31:0] outBusB;
+	// Instantiate the Unit Under Test (UUT)
+	registerFile uut (
+		.clk(clk),
+		.reset(reset),
+		.regWrite(regWrite),
+		.srcRegA(srcRegA),
+		.srcRegB(srcRegB),
+		.destReg(destReg),
+		.writeData(writeData),
+		.outBusA(outBusA),
+		.outBusB(outBusB)
+	);
+
+	always
+#10 clk=~clk;
+initial
+begin
+clk=0; reset=1; srcRegA=5'd0; srcRegB=5'd1;
+$monitor($time," %b %b %b %h %h %h %h %h %h",
+clk,reset,regWrite,srcRegA,srcRegB,destReg,writeData,outBusA,outBusB);
+#20 reset=0; regWrite=1; destReg=5'd2; 
+#20 writeData=32'd2;
+#40 destReg=5'd4;
+#20 writeData=32'd4;
+#20
+#40 regWrite=0; srcRegA=5'd2; srcRegB=5'd4;
+#20 $finish;
+end
+	
+      
+endmodule
+
+//pc separation 
+module pcSepbits( input [31:0] pcAddOp, output reg [3:0] pcAdd1
+    );
+always@(*)
+begin
+pcAdd1=pcAddOp[31:28];
+
+end
+
+endmodule
+
+// shift by 2
+module shiftby2( input [25:0] pcAdd, output reg [27:0] ir2
+    );
+always@(*)
+begin
+ir2=pcAdd<<2;
+end
+
+endmodule
+
+//PC COncat
+module pcConcat( input [27:0] ir0, input [3:0] ir1 , output reg [31:0] pcConcat1
+    );
+always@(*)
+begin
+pcConcat1={ir1,ir0};
+end
+
+endmodule
+
+// Mux 2 to 1
+module mux2to1( input [31:0] op1, input [31:0] op0, input sel,output reg [31:0] out0
+    );
+		always@(*)
+		begin
+			case(sel)
+			
+			1'd0:out0=op0;
+			1'd1:out0=op1;
+			endcase
+		
+		end
+
+endmodule
+
+//ALU
+module ALU( input [31:0] aluSrcA ,
+				input [31:0] aluSrcB ,
+				input [3:0] aluCtrl ,
+				output zeroFlag,
+				output reg [31:0] aluOut0,
+				output reg [31:0] aluOut1
+    );
+reg [63:0] multiply;
+
+always@(*)
+begin
+	case(aluCtrl)
+	4'b0000: aluOut0= aluSrcA + aluSrcB;//add
+	4'b0010: aluOut0= aluSrcA - aluSrcB;//sub
+	4'b0011: begin
+				multiply= aluSrcA * aluSrcB;//mult
+				aluOut0 = multiply[31:0];
+				aluOut1 = multiply[63:32];
+				end
+	4'b0100: begin //div
+				aluOut0= aluSrcA / aluSrcB;
+				aluOut1= aluSrcA % aluSrcB;
+				end
+	4'b0101: aluOut0= aluSrcA << aluSrcB;//shift
+	4'b0110: aluOut0= aluSrcA | aluSrcB;//OR
+	endcase
+end
+endmodule
+
+//Decoder
+module decoder(input [4:0] destReg, output reg [31:0] decOut
+    );
+always @ (*)
+begin
+case(destReg)
+5 'd0:decOut=32'b0000_0000_0000_0000_0000_0000_0000_0001;
+5 'd1:decOut=32'b0000_0000_0000_0000_0000_0000_0000_0010;
+5 'd2:decOut=32'b0000_0000_0000_0000_0000_0000_0000_0100;
+5 'd3:decOut=32'b0000_0000_0000_0000_0000_0000_0000_1000;
+5 'd4:decOut=32'b0000_0000_0000_0000_0000_0000_0001_0000;
+5 'd5:decOut=32'b0000_0000_0000_0000_0000_0000_0010_0000;
+5 'd6:decOut=32'b0000_0000_0000_0000_0000_0000_0100_0000;
+5 'd7:decOut=32'b0000_0000_0000_0000_0000_0000_1000_0000;
+5 'd8:decOut=32'b0000_0000_0000_0000_0000_0001_0000_0000;
+5 'd9:decOut=32'b0000_0000_0000_0000_0000_0010_0000_0000;
+5 'd10:decOut=32'b0000_0000_0000_0000_0000_0100_0000_0000;
+5 'd11:decOut=32'b0000_0000_0000_0000_0000_1000_0000_0000;
+5 'd12:decOut=32'b0000_0000_0000_0000_0001_0000_0000_0000;
+5 'd13:decOut=32'b0000_0000_0000_0000_0010_0000_0000_0000;
+5 'd14:decOut=32'b0000_0000_0000_0000_0100_0000_0000_0000;
+5 'd15:decOut=32'b0000_0000_0000_0000_1000_0000_0000_0000;
+5 'd16:decOut=32'b0000_0000_0000_0001_0000_0000_0000_0000;
+5 'd17:decOut=32'b0000_0000_0000_0010_0000_0000_0000_0000;
+5 'd18:decOut=32'b0000_0000_0000_0100_0000_0000_0000_0000;
+5 'd19:decOut=32'b0000_0000_0000_1000_0000_0000_0000_0000;
+5 'd20:decOut=32'b0000_0000_0001_0000_0000_0000_0000_0000;
+5 'd21:decOut=32'b0000_0000_0010_0000_0000_0000_0000_0000;
+5 'd22:decOut=32'b0000_0000_0100_0000_0000_0000_0000_0000;
+5 'd23:decOut=32'b0000_0000_1000_0000_0000_0000_0000_0000;
+5 'd24:decOut=32'b0000_0001_0000_0000_0000_0000_0000_0000;
+5 'd25:decOut=32'b0000_0010_0000_0000_0000_0000_0000_0000;
+5 'd26:decOut=32'b0000_0100_0000_0000_0000_0000_0000_0000;
+5 'd27:decOut=32'b0000_1000_0000_0000_0000_0000_0000_0000;
+5 'd28:decOut=32'b0001_0000_0000_0000_0000_0000_0000_0000;
+5 'd29:decOut=32'b0010_0000_0000_0000_0000_0000_0000_0000;
+5 'd30:decOut=32'b0100_0000_0000_0000_0000_0000_0000_0000;
+5 'd31:decOut=32'b1000_0000_0000_0000_0000_0000_0000_0000;
+endcase
+end
+
+endmodule
+
+//Malu OP module
+
+module mALUOp(input [31:0] hi, input [31:0] lo, input [31:0] aluOut0, input [31:0] aluOut1, input mAluOp,
+				  output reg [31:0] hiOut, output reg [31:0] loOut
+    );
+	reg [63:0] hiLo;
+	reg [63:0] aluOutput;
+	reg [63:0] mAnswer;
+	always@(*)
+	begin
+			hiLo[63:0] <= {hi,lo};
+			aluOutput[63:0] <= {aluOut1,aluOut0};
+		if(mAluOp == 0)
+			begin
+			mAnswer = hiLo + aluOutput;
+			hiOut = mAnswer[63:32];
+			loOut = mAnswer[31:0];
+			end
+		else
+			begin
+			mAnswer = hiLo - aluOutput;
+			hiOut = mAnswer[63:32];
+			loOut = mAnswer[31:0];
+			end
+	end
+
+endmodule
+
+//Memory Data
+module memoryData(
+		input                         clk,  
+      // address input, shared by read and write port  
+      input     [31:0]               mem_access_addr,  
+      // write port  
+      input     [31:0]              mem_write_data,  
+      input                         mem_write_en,  
+      input mem_read,  
+      // read port  
+      output      [31:0]             mem_read_data  
+
+    );
+		integer i;  
+      reg [31:0] ram [3:0];  
+      wire [3 : 0] ram_addr = mem_access_addr[3 : 0];  
+      initial begin  
+           for(i=0;i<=15;i=i+1)  
+                ram[i] <= 32'd5;  
+      end  
+      always @(negedge clk) begin  
+           if (mem_write_en)  
+                ram[ram_addr] <= mem_write_data;  
+      end  
+      assign mem_read_data = (mem_read==1'b1) ? ram[ram_addr]: 32'd0;
+endmodule
+
+//MEm test bench
+
+module memoryDataTest;
+
+	// Inputs
+	reg clk;
+	reg [31:0] mem_access_addr;
+	reg [31:0] mem_write_data;
+	reg mem_write_en;
+	reg mem_read;
+
+	// Outputs
+	wire [31:0] mem_read_data;
+
+	// Instantiate the Unit Under Test (UUT)
+	memoryData uut (
+		.clk(clk), 
+		.mem_access_addr(mem_access_addr), 
+		.mem_write_data(mem_write_data), 
+		.mem_write_en(mem_write_en), 
+		.mem_read(mem_read), 
+		.mem_read_data(mem_read_data)
+	);
+
+	initial begin
+		// Initialize Inputs
+		clk = 0;
+		mem_access_addr = 0;
+		mem_write_data = 0;
+		mem_write_en = 0;
+		mem_read = 0;
+
+		// Wait 100 ns for global reset to finish
+		#100;
+        
+		// Add stimulus here
+
+	end
+      
+endmodule
+
+//Register Set
+
+module registerSet(input clk, input reset, input regWrite, input [31:0] decOut, input [31:0]
+writeData, output [31:0] outR0,output [31:0] outR1,output [31:0] outR2,output [31:0] outR3,output
+[31:0] outR4,output [31:0] outR5,output [31:0] outR6,output [31:0] outR7, output [31:0] outR8,output
+[31:0] outR9,output [31:0] outR10,output [31:0] outR11,output [31:0] outR12,output [31:0]
+outR13,output [31:0] outR14,output [31:0] outR15,output [31:0] outR16,output [31:0] outR17,output
+[31:0] outR18,output [31:0] outR19,output [31:0] outR20,output [31:0] outR21,output [31:0]
+outR22,output [31:0] outR23,output [31:0] outR24,output [31:0] outR25,output [31:0] outR26,output
+[31:0] outR27,output [31:0] outR28,output [31:0] outR29,output [31:0] outR30,output [31:0] outR31);
+  
+Register32bit r0(clk, reset, regWrite, decOut[0], writeData, outR0);
+Register32bit r1(clk, reset, regWrite, decOut[1], writeData, outR1);
+Register32bit r2(clk, reset, regWrite, decOut[2], writeData, outR2);
+Register32bit r3(clk, reset, regWrite, decOut[3], writeData, outR3);
+Register32bit r4(clk, reset, regWrite, decOut[4], writeData, outR4);
+Register32bit r5(clk, reset, regWrite, decOut[5], writeData, outR5);
+Register32bit r6(clk, reset, regWrite, decOut[6], writeData, outR6);
+Register32bit r7(clk, reset, regWrite, decOut[7], writeData, outR7);
+Register32bit r8(clk, reset, regWrite, decOut[8], writeData, outR8);
+Register32bit r9(clk, reset, regWrite, decOut[9], writeData, outR9);
+Register32bit r10(clk, reset, regWrite, decOut[10], writeData, outR10);
+Register32bit r11(clk, reset, regWrite, decOut[11], writeData, outR11);
+Register32bit r12(clk, reset, regWrite, decOut[12], writeData, outR12);
+Register32bit r13(clk, reset, regWrite, decOut[13], writeData, outR13);
+Register32bit r14(clk, reset, regWrite, decOut[14], writeData, outR14);
+Register32bit r15(clk, reset, regWrite, decOut[15], writeData, outR15);
+Register32bit r16(clk, reset, regWrite, decOut[16], writeData, outR16);
+Register32bit r17(clk, reset, regWrite, decOut[17], writeData, outR17);
+Register32bit r18(clk, reset, regWrite, decOut[18], writeData, outR18);
+Register32bit r19(clk, reset, regWrite, decOut[19], writeData, outR19);
+Register32bit r20(clk, reset, regWrite, decOut[20], writeData, outR20);
+Register32bit r21(clk, reset, regWrite, decOut[21], writeData, outR21);
+Register32bit r22(clk, reset, regWrite, decOut[22], writeData, outR22);
+Register32bit r23(clk, reset, regWrite, decOut[23], writeData, outR23);
+Register32bit r24(clk, reset, regWrite, decOut[24], writeData, outR24);
+Register32bit r25(clk, reset, regWrite, decOut[25], writeData, outR25);
+Register32bit r26(clk, reset, regWrite, decOut[26], writeData, outR26);
+Register32bit r27(clk, reset, regWrite, decOut[27], writeData, outR27);
+Register32bit r28(clk, reset, regWrite, decOut[28], writeData, outR28);
+Register32bit r29(clk, reset, regWrite, decOut[29], writeData, outR29);
+Register32bit r30(clk, reset, regWrite, decOut[30], writeData, outR30);
+Register32bit r31(clk, reset, regWrite, decOut[31], writeData, outR31);
+endmodule
+
+//Sign extent
+module signExtension( input[15:0] extend,
+							output reg [31:0] answer
+    );
+always @( * ) 
+begin
+    answer[31:0] <= { {16{extend[15]}}, extend[15:0] };
+end
+
+endmodule
+
+//Zero Extension & Zero Extension Shift Amount
+
+module zeroExtendShAmt(input [4:0] shAmt,
+							  output reg [31:0] zeroExtendOp 
+    );
+always@(*)
+begin
+	
+zeroExtendOp ={{27{1'b0}},shAmt[4:0]};
+end
+
+endmodule
+
+module zeroExtension(input[15:0] extend,
+							output reg[31:0] answer
+    );
+always @( * ) 
+begin
+    answer[31:0] <= { {16{1'b0}}, extend[15:0] };
+	
+end
+
+endmodule
+//Mux 
+module Mux6to1( input [31:0] op5, input [31:0] op4, input [31:0] op3, input [31:0] op2, input [31:0] op1,input [31:0] op0,
+input [2:0] sel,output reg [31:0] out0 );
+	
+	always@(*)
+		begin
+			case(sel)
+			
+			3'd0:out0=op0;
+			3'd1:out0=op1;
+			3'd2:out0=op2;
+			3'd3:out0=op3;
+			3'd4:out0=op4;
+			3'd5:out0=op5;
+			endcase
+		
+		end
+
+   
+
+
+endmodule
+
+//Mux 
+module Mux3to1(input [31:0] op2, input [31:0] op1, input [31:0] op0, input [1:0] sel,output reg [31:0] out0
+    );
+always@(*)
+		begin
+			case(sel)
+			
+			2'd0:out0=op0;
+			2'd1:out0=op1;
+			2'd2:out0=op2;
+			endcase
+		
+		end
+
+endmodule
+
+//Lo
+module LO( input [31:0] loInput, input loWr , output reg [31:0] loOutput
+    );
+always@(*)
+begin
+		if(loWr == 1)
+			loOutput=loInput;
+		else
+			loOutput=32'd0;
+		
+end
+
+endmodule
+
+//HI
+module HI(input [31:0] hiInput, input hiWr , output reg [31:0] hiOutput
+    );
+always@(*)
+begin
+		if(hiWr == 1)
+			hiOutput=hiInput;
+		else
+			hiOutput=32'd0;
+		
+end
+
+endmodule
+
+//Dff 
+module d_ff(input clk ,input reset, input regWrite, input d, input decOut, output reg q);
+	always @(negedge clk)
+	begin
+	if(reset==1)
+		q=0;
+	else
+	if(regWrite == 1 && decOut==1)
+		begin
+		q=d;
+		end
+	end
+endmodule
+
+//
